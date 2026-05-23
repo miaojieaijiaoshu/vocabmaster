@@ -1,0 +1,17 @@
+{
+  "name": "单词本",
+  "short_name": "单词本",
+  "description": "孩子英语生词本，艾宾浩斯复习",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
