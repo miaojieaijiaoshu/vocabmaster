@@ -93,14 +93,18 @@ function daysUntil(word) {
   return Math.max(0, Math.ceil(diff / 86400000));
 }
 
-function stageLabel(word) {
-  if (isMastered(word)) return '已掌握';
-  return `第 ${word.reviewStage + 1} 阶段`;
-}
-
-function stageClass(word) {
-  if (isMastered(word)) return 'stage-mastered';
-  return `stage-${Math.min(word.reviewStage, 5)}`;
+function starsHTML(word) {
+  if (isMastered(word)) return `<span class="trophy-chip">🏆</span>`;
+  const total = 6;
+  const filled = word.reviewStage;
+  let html = '<span class="stars">';
+  for (let i = 0; i < total; i++) {
+    html += i < filled
+      ? `<span class="star-on">⭐</span>`
+      : `<span class="star-off">⭐</span>`;
+  }
+  html += '</span>';
+  return html;
 }
 
 function addDays(date, days) {
@@ -322,17 +326,9 @@ function resultHTML(result, justAdded, alreadyIn = false) {
   const phonetic = result.phonetic ? `<p class="result-phonetic">/${result.phonetic}/</p>` : '';
   let status = '';
   if (justAdded) {
-    status = `<div class="result-status">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>已加入生词本
-    </div>`;
+    status = `<div class="result-status">🎉 加入生词本啦！</div>`;
   } else if (alreadyIn) {
-    status = `<div class="result-status">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>已在生词本中
-    </div>`;
+    status = `<div class="result-status">✓ 已经在生词本里啦</div>`;
   }
   return `<div class="result-card">
     <p class="result-word">${esc(result.word)}</p>
@@ -348,20 +344,13 @@ function loadingHTML() {
 }
 
 function errorHTML(msg) {
-  return `<div class="error-card">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
-      <line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>${esc(msg)}
-  </div>`;
+  return `<div class="error-card">🙁 ${esc(msg)}</div>`;
 }
 
 function placeholderHTML() {
   return `<div class="placeholder">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-    </svg>
-    <p>朗读或输入英文单词<br>马上查到中文意思</p>
+    <div class="placeholder-emoji">🦊</div>
+    <p>朗读或输入一个英文单词<br>我马上告诉你是什么意思！</p>
   </div>`;
 }
 
@@ -385,27 +374,24 @@ function renderNotebook() {
 
   if (words.length === 0) {
     list.innerHTML = `<div class="empty-state">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-      </svg>
-      <h3>生词本还是空的</h3>
-      <p>去查词页面查一个单词<br>它会自动保存到这里</p>
+      <div class="empty-emoji">📖✨</div>
+      <h3>生词本空空的</h3>
+      <p>去查词页查一个单词吧<br>它会自动跑到这里！</p>
     </div>`;
     return;
   }
 
   let html = '';
   if (active.length) {
-    html += `<p class="section-title">学习中 · ${active.length} 个</p>`;
+    html += `<p class="section-title">🌱 学习中 · ${active.length} 个</p>`;
     html += active.map(wordRowHTML).join('');
   }
   if (mastered.length) {
-    html += `<p class="section-title" style="margin-top:12px">已掌握 · ${mastered.length} 个</p>`;
+    html += `<p class="section-title" style="margin-top:14px">🏆 已掌握 · ${mastered.length} 个</p>`;
     html += mastered.map(wordRowHTML).join('');
   }
   if (!active.length && !mastered.length) {
-    html = `<p style="color:var(--text-secondary);text-align:center;padding:40px 0">没有匹配的单词</p>`;
+    html = `<p style="color:var(--text-soft);text-align:center;padding:40px 0;font-weight:700">没找到这个单词 🔎</p>`;
   }
   list.innerHTML = html;
 
@@ -421,27 +407,22 @@ function renderNotebook() {
 
 function wordRowHTML(word) {
   const days = daysUntil(word);
+  const isDue = !isMastered(word) && days === 0;
   let meta = '';
   if (!isMastered(word)) {
-    meta = days === 0
-      ? `<p class="word-row-meta due">今天复习</p>`
-      : `<p class="word-row-meta later">${days} 天后复习</p>`;
+    meta = isDue
+      ? `<p class="word-row-meta due">📣 今天要复习</p>`
+      : `<p class="word-row-meta later">⏰ ${days} 天后复习</p>`;
   }
-  return `<div class="word-row">
+  const rowClass = isMastered(word) ? 'mastered' : (isDue ? 'due' : '');
+  return `<div class="word-row ${rowClass}">
     <div class="word-row-info">
       <p class="word-row-english">${esc(word.english)}</p>
       <p class="word-row-chinese">${esc(word.chineseDefinition)}</p>
       ${meta}
     </div>
-    <span class="stage-chip ${stageClass(word)}">${stageLabel(word)}</span>
-    <button class="delete-btn" data-id="${word.id}" data-word="${esc(word.english)}" aria-label="删除">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="3 6 5 6 21 6"/>
-        <path d="M19 6l-1 14H6L5 6"/>
-        <path d="M10 11v6M14 11v6"/>
-        <path d="M9 6V4h6v2"/>
-      </svg>
-    </button>
+    ${starsHTML(word)}
+    <button class="delete-btn" data-id="${word.id}" data-word="${esc(word.english)}" aria-label="删除">🗑️</button>
   </div>`;
 }
 
@@ -515,14 +496,11 @@ function renderReview() {
   if (reviewQueue.length === 0) {
     const activeCount = words.filter(w => !isMastered(w)).length;
     body.innerHTML = `<div class="review-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-        <polyline points="22 4 12 14.01 9 11.01"/>
-      </svg>
-      <h2>今天没有要复习的单词</h2>
+      <div class="review-empty-emoji">🌈</div>
+      <h2>今天没有要复习的</h2>
       <p>${activeCount > 0
-        ? `生词本里有 ${activeCount} 个单词学习中<br>根据艾宾浩斯计划，明天再来复习吧！`
-        : '快去查词页面添加新单词吧'}</p>
+        ? `还有 ${activeCount} 个单词在学习中<br>明天再来挑战吧 💪`
+        : '快去查词页面添加新单词吧 ✨'}</p>
     </div>`;
     return;
   }
@@ -553,7 +531,7 @@ function showReviewCard() {
         <div class="flip-face flip-front">
           <p class="flip-word">${esc(word.english)}</p>
           ${word.phonetic ? `<p class="flip-phonetic">/${esc(word.phonetic)}/</p>` : ''}
-          <span class="flip-stage">${stageLabel(word)}</span>
+          <div class="flip-stars">${starsHTML(word)}</div>
         </div>
         <div class="flip-face flip-back">
           <p class="flip-english-small">${esc(word.english)}</p>
@@ -562,11 +540,11 @@ function showReviewCard() {
       </div>
     </div>
 
-    <p class="flip-tap-hint" id="flip-hint">点击卡片查看释义</p>
+    <p class="flip-tap-hint" id="flip-hint">👆 点击卡片看意思</p>
 
     <div class="answer-row hidden" id="answer-row">
-      <button class="answer-btn btn-wrong" id="btn-wrong">✗ &nbsp;不认识</button>
-      <button class="answer-btn btn-right" id="btn-right">✓ &nbsp;认识！</button>
+      <button class="answer-btn btn-wrong" id="btn-wrong">😅 不认识</button>
+      <button class="answer-btn btn-right" id="btn-right">😎 我认识！</button>
     </div>
   `;
 
@@ -585,9 +563,13 @@ function showReviewCard() {
 
 async function answer(correct) {
   const word = reviewQueue[reviewIndex];
+  const wasMasteredJustNow = !isMastered(word) && correct && word.reviewStage === 5;
   recordReview(word, correct);
   await updateWord(word);
-  if (correct) reviewCorrect++;
+  if (correct) {
+    reviewCorrect++;
+    celebrate(wasMasteredJustNow ? 60 : 20);
+  }
   reviewIndex++;
   showReviewCard();
 }
@@ -595,17 +577,36 @@ async function answer(correct) {
 function showSessionDone() {
   const total = reviewQueue.length;
   const correct = reviewCorrect;
-  const emoji = correct / total >= 0.9 ? '🎉' : correct / total >= 0.6 ? '👍' : '💪';
+  const ratio = correct / total;
+  const emoji = ratio >= 0.9 ? '🏆' : ratio >= 0.6 ? '🌟' : '💪';
+  const msg = ratio >= 0.9 ? '你真是个小天才！' : ratio >= 0.6 ? '做得很棒！' : '继续加油！';
 
   document.getElementById('review-body').innerHTML = `
     <div class="session-done">
       <div class="session-emoji">${emoji}</div>
-      <h2>本轮复习完成！</h2>
-      <p>答对 ${correct} / ${total} 个</p>
-      <button class="btn-primary-lg" id="restart-btn">再练一轮</button>
+      <h2>${msg}</h2>
+      <p>答对了 ${correct} / ${total} 个 🎯</p>
+      <button class="btn-primary-lg" id="restart-btn">再来一轮 →</button>
     </div>`;
 
   document.getElementById('restart-btn').addEventListener('click', renderReview);
+  celebrate(50);
+}
+
+// ─ Confetti celebration ─
+function celebrate(count = 30) {
+  const colors = ['#FF6B6B', '#FFD93D', '#6BCF7F', '#4ECDC4', '#A78BFA', '#FF9FB2', '#FFA726'];
+  for (let i = 0; i < count; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + '%';
+    c.style.background = colors[Math.floor(Math.random() * colors.length)];
+    c.style.animationDelay = Math.random() * 0.4 + 's';
+    c.style.animationDuration = (2 + Math.random() * 1.5) + 's';
+    c.style.transform = `rotate(${Math.random() * 360}deg)`;
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 4000);
+  }
 }
 
 // ════════════════════════════════════════════

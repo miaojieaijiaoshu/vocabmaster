@@ -15,26 +15,15 @@
 
   <!-- ── 查词 ── -->
   <div id="tab-lookup" class="tab-page active">
-    <header><h1>查词</h1></header>
+    <header><h1>🔍 查词</h1></header>
     <div class="tab-body">
-      <button id="mic-btn" class="mic-btn" aria-label="语音输入">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-          <line x1="12" y1="19" x2="12" y2="23"/>
-          <line x1="8" y1="23" x2="16" y2="23"/>
-        </svg>
-      </button>
-      <p id="voice-hint" class="voice-hint">点击朗读单词</p>
+      <button id="mic-btn" class="mic-btn" aria-label="语音输入">🎤</button>
+      <p id="voice-hint" class="voice-hint">点击按钮，朗读单词 🎵</p>
 
       <div class="search-row">
-        <input id="word-input" type="text" placeholder="或者输入英文单词…"
+        <input id="word-input" type="text" placeholder="也可以输入单词…"
                autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
-        <button id="search-btn" class="icon-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-        </button>
+        <button id="search-btn" class="icon-btn" aria-label="查询">🔎</button>
       </div>
 
       <div id="lookup-result"></div>
@@ -44,46 +33,34 @@
   <!-- ── 生词本 ── -->
   <div id="tab-notebook" class="tab-page">
     <header>
-      <h1>生词本</h1>
-      <button id="add-btn" class="icon-btn" aria-label="手动添加">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-      </button>
+      <h1>📖 生词本</h1>
+      <button id="add-btn" class="icon-btn" aria-label="手动添加">+</button>
     </header>
     <div class="tab-body">
-      <input id="notebook-search" type="text" placeholder="搜索…" class="search-input">
+      <input id="notebook-search" type="text" placeholder="🔍 搜一搜…" class="search-input">
       <div id="notebook-list"></div>
     </div>
   </div>
 
   <!-- ── 复习 ── -->
   <div id="tab-review" class="tab-page">
-    <header><h1>复习</h1></header>
+    <header><h1>🎯 复习</h1></header>
     <div class="tab-body" id="review-body"></div>
   </div>
 
   <!-- 底部标签栏 -->
   <nav id="tab-bar">
     <button class="tab-btn active" data-tab="lookup">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
+      <span class="tab-emoji">🔍</span>
       <span>查词</span>
     </button>
     <button class="tab-btn" data-tab="notebook">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-      </svg>
+      <span class="tab-emoji">📖</span>
       <span>生词本</span>
       <span id="notebook-badge" class="badge hidden"></span>
     </button>
     <button class="tab-btn" data-tab="review">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
-        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-      </svg>
+      <span class="tab-emoji">🎯</span>
       <span>复习</span>
       <span id="review-badge" class="badge hidden"></span>
     </button>
@@ -93,7 +70,7 @@
 <!-- 手动添加弹窗 -->
 <div id="add-modal" class="modal hidden">
   <div class="modal-card">
-    <h2>手动添加</h2>
+    <h2>✏️ 手动添加</h2>
     <input id="add-english" type="text" placeholder="英文单词"
            autocomplete="off" autocorrect="off" autocapitalize="none">
     <input id="add-chinese" type="text" placeholder="中文释义">
