@@ -1,18 +1,25 @@
 {
-  "name": "单词本",
-  "short_name": "单词本",
-  "description": "孩子英语生词本，艾宾浩斯复习",
-  "start_url": "./",
-  "scope": "./",
+  "name": "咚咚的英语王国",
+  "short_name": "咚咚英语",
+  "description": "咚咚的英语单词学习王国",
+  "start_url": "/vocabmaster/",
+  "scope": "/vocabmaster/",
   "display": "standalone",
-  "background_color": "#f5f5f7",
-  "theme_color": "#4f46e5",
+  "background_color": "#FFFAF0",
+  "theme_color": "#FF6B6B",
   "orientation": "portrait",
   "icons": [
     {
       "src": "icon.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
