@@ -115,31 +115,50 @@ function addDays(date, days) {
 
 // ════════════════════════════════════════════
 // 3. DICTIONARY API
-// 通过 Cloudflare Worker 代理访问有道词典，返回精简释义
+// Google Translate（中文释义）+ Free Dictionary（音标 + 词性）
+// 两个都是 CORS-enabled，直接浏览器调用，无需后端
 // ════════════════════════════════════════════
-const DICT_API = 'https://dongdong-dict.miaojieaijiaoshu.workers.dev';
+const POS_MAP = {
+  noun: 'n.', verb: 'v.', adjective: 'adj.', adverb: 'adv.',
+  pronoun: 'pron.', preposition: 'prep.', conjunction: 'conj.',
+  interjection: 'int.', determiner: 'det.',
+};
 
 async function lookupWord(query) {
   const word = query.toLowerCase().trim();
   if (!word) throw new Error('请输入单词');
 
-  let res, data;
-  try {
-    res = await fetch(`${DICT_API}/?q=${encodeURIComponent(word)}`);
-    data = await res.json();
-  } catch (e) {
-    throw new Error('网络错误，请稍后重试');
+  const [googleRes, dictRes] = await Promise.allSettled([
+    fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${encodeURIComponent(word)}`),
+    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`),
+  ]);
+
+  let translation = '';
+  let phonetic = '';
+  let posTags = [];
+
+  // Google Translate → 中文释义
+  if (googleRes.status === 'fulfilled' && googleRes.value.ok) {
+    const data = await googleRes.value.json();
+    translation = data?.[0]?.[0]?.[0] || '';
   }
 
-  if (!res.ok || data.error) {
-    throw new Error('找不到这个单词，请检查拼写');
+  // Free Dictionary → 音标 + 词性
+  if (dictRes.status === 'fulfilled' && dictRes.value.ok) {
+    const data = await dictRes.value.json();
+    if (Array.isArray(data) && data[0]) {
+      phonetic = data[0].phonetic || data[0].phonetics?.find(p => p.text)?.text || '';
+      const meanings = data[0].meanings || [];
+      posTags = [...new Set(
+        meanings.slice(0, 2).map(m => POS_MAP[m.partOfSpeech] || m.partOfSpeech + '.').filter(Boolean)
+      )];
+    }
   }
 
-  return {
-    word: data.word,
-    phonetic: data.phonetic || '',
-    chineseDefinition: data.definitions.join('；'),
-  };
+  if (!translation) throw new Error('找不到这个单词，请检查拼写是否正确');
+
+  const posPrefix = posTags.length ? posTags.join('/') + ' ' : '';
+  return { word, phonetic, chineseDefinition: posPrefix + translation };
 }
 
 // ════════════════════════════════════════════
