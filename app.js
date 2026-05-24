@@ -115,40 +115,31 @@ function addDays(date, days) {
 
 // ════════════════════════════════════════════
 // 3. DICTIONARY API
-// Free Dictionary API (phonetics) + MyMemory (Chinese translation)
+// 通过 Cloudflare Worker 代理访问有道词典，返回精简释义
 // ════════════════════════════════════════════
+const DICT_API = 'https://dongdong-dict.miaojieaijiaoshu.workers.dev';
+
 async function lookupWord(query) {
   const word = query.toLowerCase().trim();
   if (!word) throw new Error('请输入单词');
 
-  const [dictRes, transRes] = await Promise.allSettled([
-    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`),
-    fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh-CN`)
-  ]);
-
-  let phonetic = '';
-  let chineseDefinition = '';
-
-  if (dictRes.status === 'fulfilled' && dictRes.value.ok) {
-    const data = await dictRes.value.json();
-    if (Array.isArray(data) && data[0]) {
-      const entry = data[0];
-      phonetic = entry.phonetic || entry.phonetics?.find(p => p.text)?.text || '';
-    }
+  let res, data;
+  try {
+    res = await fetch(`${DICT_API}/?q=${encodeURIComponent(word)}`);
+    data = await res.json();
+  } catch (e) {
+    throw new Error('网络错误，请稍后重试');
   }
 
-  if (transRes.status === 'fulfilled' && transRes.value.ok) {
-    const data = await transRes.value.json();
-    if (data.responseStatus === 200 && data.responseData?.translatedText) {
-      chineseDefinition = data.responseData.translatedText;
-    }
+  if (!res.ok || data.error) {
+    throw new Error('找不到这个单词，请检查拼写');
   }
 
-  if (!chineseDefinition) {
-    throw new Error('找不到这个单词，请检查拼写是否正确');
-  }
-
-  return { word, phonetic, chineseDefinition };
+  return {
+    word: data.word,
+    phonetic: data.phonetic || '',
+    chineseDefinition: data.definitions.join('；'),
+  };
 }
 
 // ════════════════════════════════════════════
@@ -313,25 +304,48 @@ async function doLookup(query) {
     } else {
       setLookupResult(resultHTML(result, false, true));
     }
+    // 自动朗读单词
+    speak(result.word);
   } catch (err) {
     setLookupResult(errorHTML(err.message));
   }
 }
+
+// ════════════════════════════════════════════
+// TEXT-TO-SPEECH (用 iPad Safari 内置的语音合成)
+// ════════════════════════════════════════════
+function speak(word) {
+  if (!('speechSynthesis' in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(word);
+    utter.lang = 'en-US';
+    utter.rate = 0.85;  // 稍慢一点,孩子听得清
+    utter.pitch = 1.1;
+    speechSynthesis.speak(utter);
+  } catch (e) {}
+}
+// 暴露到全局,inline onclick 能调用
+window.speak = speak;
 
 function setLookupResult(html) {
   document.getElementById('lookup-result').innerHTML = html;
 }
 
 function resultHTML(result, justAdded, alreadyIn = false) {
-  const phonetic = result.phonetic ? `<p class="result-phonetic">/${result.phonetic}/</p>` : '';
+  const phonetic = result.phonetic ? `<span class="result-phonetic">/${result.phonetic}/</span>` : '';
   let status = '';
   if (justAdded) {
     status = `<div class="result-status">🎉 加入生词本啦！</div>`;
   } else if (alreadyIn) {
     status = `<div class="result-status">✓ 已经在生词本里啦</div>`;
   }
+  const wordEsc = esc(result.word);
   return `<div class="result-card">
-    <p class="result-word">${esc(result.word)}</p>
+    <div class="result-word-row">
+      <p class="result-word">${wordEsc}</p>
+      <button class="speak-btn" onclick="speak('${wordEsc}')" aria-label="再读一遍">🔊</button>
+    </div>
     ${phonetic}
     <hr class="result-divider">
     <p class="result-definition">${esc(result.chineseDefinition)}</p>
@@ -532,6 +546,7 @@ function showReviewCard() {
           <p class="flip-word">${esc(word.english)}</p>
           ${word.phonetic ? `<p class="flip-phonetic">/${esc(word.phonetic)}/</p>` : ''}
           <div class="flip-stars">${starsHTML(word)}</div>
+          <button class="speak-btn" style="margin-top:8px" onclick="event.stopPropagation();speak('${esc(word.english)}')" aria-label="朗读">🔊</button>
         </div>
         <div class="flip-face flip-back">
           <p class="flip-english-small">${esc(word.english)}</p>
