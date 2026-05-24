@@ -595,6 +595,11 @@ let firstPassCorrect = 0;     // 第一轮答对数
 function initReview() {}
 
 function renderReview() {
+  // 正处于复习会话中（主轮未完 或 错题重练阶段）→ 恢复当前卡片，不重置
+  if (retryMode || reviewIndex < reviewQueue.length) {
+    showReviewCard();
+    return;
+  }
   freeReviewMode = false;
   retryMode = false;
   reviewWrongWords = [];
