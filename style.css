@@ -451,6 +451,45 @@ header h1 {
 }
 .delete-btn:active { color: var(--primary); background: var(--primary-soft); }
 
+.edit-btn {
+  background: none;
+  border: none;
+  color: #C0C0D0;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 18px;
+  transition: all 0.15s;
+}
+.edit-btn:active { color: var(--lavender); background: #EDE9FE; }
+
+/* 编辑弹窗专属 */
+.edit-word-label {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text);
+  text-align: center;
+  letter-spacing: 1px;
+}
+.modal-card textarea {
+  padding: 14px 18px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  width: 100%;
+  resize: vertical;
+  line-height: 1.6;
+}
+.modal-card textarea:focus { border-color: var(--lavender); background: #fff; }
+
 .empty-state {
   display: flex;
   flex-direction: column;

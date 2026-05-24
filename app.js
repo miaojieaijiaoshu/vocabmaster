@@ -499,6 +499,10 @@ function renderNotebook() {
   }
   list.innerHTML = html;
 
+  list.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => openEditModal(btn.dataset.id));
+  });
+
   list.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (confirm(`确定删除「${btn.dataset.word}」吗？`)) {
@@ -526,6 +530,7 @@ function wordRowHTML(word) {
       ${meta}
     </div>
     ${starsHTML(word)}
+    <button class="edit-btn"   data-id="${word.id}" aria-label="编辑释义">✏️</button>
     <button class="delete-btn" data-id="${word.id}" data-word="${esc(word.english)}" aria-label="删除">🗑️</button>
   </div>`;
 }
@@ -565,6 +570,41 @@ function initModal() {
     closeAddModal();
     if (currentTab === 'notebook') renderNotebook();
   });
+}
+
+// ── 编辑释义弹窗 ──
+let _editingId = null;
+
+function initEditModal() {
+  document.getElementById('cancel-edit').addEventListener('click', closeEditModal);
+  document.getElementById('edit-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('edit-modal')) closeEditModal();
+  });
+  document.getElementById('confirm-edit').addEventListener('click', async () => {
+    const chi = document.getElementById('edit-chinese').value.trim();
+    if (!chi) return;
+    const word = words.find(w => w.id === _editingId);
+    if (!word) return;
+    word.chineseDefinition = chi;
+    await updateWord(word);
+    closeEditModal();
+    renderNotebook();
+  });
+}
+
+function openEditModal(id) {
+  const word = words.find(w => w.id === id);
+  if (!word) return;
+  _editingId = id;
+  document.getElementById('edit-word-label').textContent = word.english;
+  document.getElementById('edit-chinese').value = word.chineseDefinition;
+  document.getElementById('edit-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('edit-chinese').focus(), 100);
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  _editingId = null;
 }
 
 function openAddModal() {
@@ -805,6 +845,7 @@ async function boot() {
   initLookup();
   initNotebook();
   initModal();
+  initEditModal();
   initReview();
   updateBadges();
 

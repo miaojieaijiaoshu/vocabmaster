@@ -11,6 +11,7 @@
   <link rel="icon" type="image/png" href="icon.png">
   <title>咚咚的英语王国</title>
   <link rel="stylesheet" href="style.css">
+  <script src="dict.js"></script>
 </head>
 <body>
 <div id="app">
@@ -82,6 +83,19 @@
       <div style="flex:1"></div>
       <button id="cancel-add" class="btn-secondary">取消</button>
       <button id="confirm-add" class="btn-primary">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑释义弹窗 -->
+<div id="edit-modal" class="modal hidden">
+  <div class="modal-card">
+    <h2>✏️ 编辑释义</h2>
+    <p id="edit-word-label" class="edit-word-label"></p>
+    <textarea id="edit-chinese" rows="4" placeholder="中文释义…"></textarea>
+    <div class="modal-row">
+      <button id="cancel-edit" class="btn-secondary">取消</button>
+      <button id="confirm-edit" class="btn-primary">保存</button>
     </div>
   </div>
 </div>
