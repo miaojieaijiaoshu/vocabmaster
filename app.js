@@ -372,6 +372,52 @@ function speak(word) {
 // 暴露到全局,inline onclick 能调用
 window.speak = speak;
 
+// ════════════════════════════════════════════
+// 答题音效（Web Audio API 生成，无需音频文件）
+// ════════════════════════════════════════════
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    _audioCtx = new AC();
+  }
+  if (_audioCtx.state === 'suspended') _audioCtx.resume();
+  return _audioCtx;
+}
+
+function playCorrectSound() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  // C5 → E5 → G5 三音上行，欢快"叮叮叮"
+  [[523, 0], [659, 0.10], [784, 0.20]].forEach(([freq, t]) => {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, now + t);
+    gain.gain.linearRampToValueAtTime(0.28, now + t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.28);
+    osc.start(now + t); osc.stop(now + t + 0.32);
+  });
+}
+
+function playWrongSound() {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  // 音调从 380Hz 滑落到 210Hz，柔和的"唔"
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(380, now);
+  osc.frequency.linearRampToValueAtTime(210, now + 0.35);
+  gain.gain.setValueAtTime(0.22, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+  osc.start(now); osc.stop(now + 0.42);
+}
+
 function setLookupResult(html) {
   document.getElementById('lookup-result').innerHTML = html;
 }
@@ -540,12 +586,20 @@ let reviewQueue = [];
 let reviewIndex = 0;
 let reviewCorrect = 0;
 let reviewFlipped = false;
-let freeReviewMode = false;  // true = 练习模式（不更新艾宾浩斯进度）
+let freeReviewMode = false;   // true = 练习模式（不更新艾宾浩斯进度）
+let retryMode = false;        // true = 错题重练阶段
+let reviewWrongWords = [];    // 本轮答错的词，轮末强制重练
+let firstPassTotal = 0;       // 第一轮总题数（用于结算界面）
+let firstPassCorrect = 0;     // 第一轮答对数
 
 function initReview() {}
 
 function renderReview() {
   freeReviewMode = false;
+  retryMode = false;
+  reviewWrongWords = [];
+  firstPassTotal = 0;
+  firstPassCorrect = 0;
   reviewQueue = words.filter(needsReview).sort(() => Math.random() - 0.5);
   reviewIndex = 0;
   reviewCorrect = 0;
@@ -576,6 +630,10 @@ function renderReview() {
 
 function startFreeReview() {
   freeReviewMode = true;
+  retryMode = false;
+  reviewWrongWords = [];
+  firstPassTotal = 0;
+  firstPassCorrect = 0;
   reviewQueue = words.filter(w => !isMastered(w)).sort(() => Math.random() - 0.5);
   reviewIndex = 0;
   reviewCorrect = 0;
@@ -583,9 +641,30 @@ function startFreeReview() {
   showReviewCard();
 }
 
+function startRetry() {
+  retryMode = true;
+  const n = reviewWrongWords.length;
+  reviewQueue = [...reviewWrongWords].sort(() => Math.random() - 0.5);
+  reviewWrongWords = [];   // 清空，等本轮重练时重新收集答错的
+  reviewIndex = 0;
+  reviewFlipped = false;
+
+  document.getElementById('review-body').innerHTML = `
+    <div class="session-done">
+      <div class="session-emoji">🔁</div>
+      <h2>还有 ${n} 个词再练一遍！</h2>
+      <p>全部答对才算完成 💪</p>
+      <button class="btn-primary-lg" id="retry-go-btn">继续 →</button>
+    </div>`;
+  document.getElementById('retry-go-btn').addEventListener('click', showReviewCard);
+}
+
 function showReviewCard() {
   if (reviewIndex >= reviewQueue.length) {
-    showSessionDone();
+    // 记录第一轮成绩（只记一次）
+    if (!retryMode) { firstPassTotal = reviewQueue.length; firstPassCorrect = reviewCorrect; }
+    // 有答错的词→强制重练，否则结算
+    if (reviewWrongWords.length > 0) { startRetry(); } else { showSessionDone(); }
     return;
   }
 
@@ -595,7 +674,7 @@ function showReviewCard() {
 
   body.innerHTML = `
     <div class="progress-bar-wrap">
-      <p class="progress-label">${reviewIndex + 1} / ${reviewQueue.length}${freeReviewMode ? ' &nbsp;<span class="practice-badge">✏️ 练习</span>' : ''}</p>
+      <p class="progress-label">${reviewIndex + 1} / ${reviewQueue.length}${retryMode ? ' &nbsp;<span class="practice-badge">🔁 错题</span>' : freeReviewMode ? ' &nbsp;<span class="practice-badge">✏️ 练习</span>' : ''}</p>
       <div class="progress-track">
         <div class="progress-fill" style="width:${(reviewIndex + 1) / reviewQueue.length * 100}%"></div>
       </div>
@@ -639,23 +718,33 @@ function showReviewCard() {
 
 async function answer(correct) {
   const word = reviewQueue[reviewIndex];
-  if (freeReviewMode) {
+
+  // 音效
+  if (correct) playCorrectSound(); else playWrongSound();
+
+  if (retryMode) {
+    // 错题重练阶段：不更新艾宾浩斯，答错继续排队
+    if (correct) { celebrate(20); }
+    else { reviewWrongWords.push(word); }
+  } else if (freeReviewMode) {
     // 练习模式：只记分，不改艾宾浩斯进度
     if (correct) { reviewCorrect++; celebrate(20); }
+    else { reviewWrongWords.push(word); }
   } else {
-    // 正式复习：更新进度
+    // 正式复习：更新艾宾浩斯进度
     const wasMasteredJustNow = !isMastered(word) && correct && word.reviewStage === 5;
     recordReview(word, correct);
     await updateWord(word);
     if (correct) { reviewCorrect++; celebrate(wasMasteredJustNow ? 60 : 20); }
+    else { reviewWrongWords.push(word); }
   }
   reviewIndex++;
   showReviewCard();
 }
 
 function showSessionDone() {
-  const total = reviewQueue.length;
-  const correct = reviewCorrect;
+  const total   = firstPassTotal   || reviewQueue.length;
+  const correct = firstPassCorrect || reviewCorrect;
   const ratio = correct / total;
   const emoji = ratio >= 0.9 ? '🏆' : ratio >= 0.6 ? '🌟' : '💪';
   const msg = ratio >= 0.9 ? '你真是个小天才！' : ratio >= 0.6 ? '做得很棒！' : '继续加油！';
