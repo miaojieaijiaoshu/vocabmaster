@@ -114,51 +114,76 @@ function addDays(date, days) {
 }
 
 // ════════════════════════════════════════════
-// 3. DICTIONARY API
-// Google Translate（中文释义）+ Free Dictionary（音标 + 词性）
-// 两个都是 CORS-enabled，直接浏览器调用，无需后端
+// 3. DICTIONARY
+// ① 内置词典（dict.js，约400词，即时响应）
+// ② ECDICT（~56000词，首次查词时异步加载，离线可用）
+// ③ MyMemory 在线兜底（覆盖 ecdict 未收录的词）
 // ════════════════════════════════════════════
-const POS_MAP = {
-  noun: 'n.', verb: 'v.', adjective: 'adj.', adverb: 'adv.',
-  pronoun: 'pron.', preposition: 'prep.', conjunction: 'conj.',
-  interjection: 'int.', determiner: 'det.',
-};
+const SLANG = ['加血','回血','掉血','buff','debuff','AOE','DPS','副本','野怪','技能','法术','魔法值'];
+
+// ── ECDICT 懒加载（后台静默拉取，仅加载一次）──
+let _ecdict = null;
+let _ecdictPromise = null;
+
+function loadEcdict() {
+  if (_ecdictPromise) return _ecdictPromise;
+  _ecdictPromise = fetch('./ecdict.json')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => { _ecdict = data; return data; })
+    .catch(() => null);
+  return _ecdictPromise;
+}
 
 async function lookupWord(query) {
   const word = query.toLowerCase().trim();
   if (!word) throw new Error('请输入单词');
 
-  const [googleRes, dictRes] = await Promise.allSettled([
-    fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${encodeURIComponent(word)}`),
-    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`),
-  ]);
+  // ① 内置词典（即时，无网络）
+  const builtin = lookupBuiltin(word);
+  if (builtin) return builtin;
 
-  let translation = '';
-  let phonetic = '';
-  let posTags = [];
-
-  // Google Translate → 中文释义
-  if (googleRes.status === 'fulfilled' && googleRes.value.ok) {
-    const data = await googleRes.value.json();
-    translation = data?.[0]?.[0]?.[0] || '';
+  // ② ECDICT（等待加载完成；若已加载则即时返回）
+  const ecdict = await loadEcdict();
+  if (ecdict && ecdict[word]) {
+    const [phonetic, zh] = ecdict[word];
+    return { word, phonetic, chineseDefinition: zh };
   }
 
-  // Free Dictionary → 音标 + 词性
-  if (dictRes.status === 'fulfilled' && dictRes.value.ok) {
-    const data = await dictRes.value.json();
-    if (Array.isArray(data) && data[0]) {
-      phonetic = data[0].phonetic || data[0].phonetics?.find(p => p.text)?.text || '';
-      const meanings = data[0].meanings || [];
-      posTags = [...new Set(
-        meanings.slice(0, 2).map(m => POS_MAP[m.partOfSpeech] || m.partOfSpeech + '.').filter(Boolean)
-      )];
-    }
-  }
+  // ③ MyMemory 在线兜底（过滤游戏俚语）
+  return lookupOnline(word);
+}
+
+function lookupBuiltin(word) {
+  if (typeof BUILTIN_DICT === 'undefined') return null;
+  const entry = BUILTIN_DICT[word];
+  if (!entry) return null;
+  const [phonetic, defines] = entry;
+  return { word, phonetic, chineseDefinition: defines.join('；') };
+}
+
+async function lookupOnline(word) {
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh-CN`;
+  let res;
+  try { res = await fetch(url); } catch { throw new Error('网络错误，请稍后重试'); }
+  if (!res.ok) throw new Error('查询失败，请稍后重试');
+  const data = await res.json();
+
+  // 从 matches 列表里选最佳非游戏翻译
+  const matches = data.matches || [];
+  const best = matches.find(m => m.quality >= 60 && !isSlang(m.translation))
+            || matches.find(m => !isSlang(m.translation));
+  const translation = best?.translation
+    || (!isSlang(data.responseData?.translatedText) ? data.responseData?.translatedText : '')
+    || data.responseData?.translatedText
+    || '';
 
   if (!translation) throw new Error('找不到这个单词，请检查拼写是否正确');
+  return { word, phonetic: '', chineseDefinition: translation };
+}
 
-  const posPrefix = posTags.length ? posTags.join('/') + ' ' : '';
-  return { word, phonetic, chineseDefinition: posPrefix + translation };
+function isSlang(text) {
+  if (!text) return false;
+  return SLANG.some(s => text.includes(s));
 }
 
 // ════════════════════════════════════════════
@@ -660,6 +685,7 @@ function esc(str) {
 async function boot() {
   await DB.init();
   await loadWords();
+  loadEcdict(); // 后台预加载 ECDICT 词典，不阻塞启动
 
   initLookup();
   initNotebook();
