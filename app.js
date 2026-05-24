@@ -540,10 +540,12 @@ let reviewQueue = [];
 let reviewIndex = 0;
 let reviewCorrect = 0;
 let reviewFlipped = false;
+let freeReviewMode = false;  // true = 练习模式（不更新艾宾浩斯进度）
 
 function initReview() {}
 
 function renderReview() {
+  freeReviewMode = false;
   reviewQueue = words.filter(needsReview).sort(() => Math.random() - 0.5);
   reviewIndex = 0;
   reviewCorrect = 0;
@@ -559,10 +561,25 @@ function renderReview() {
       <p>${activeCount > 0
         ? `还有 ${activeCount} 个单词在学习中<br>明天再来挑战吧 💪`
         : '快去查词页面添加新单词吧 ✨'}</p>
+      ${activeCount > 0
+        ? `<button class="btn-practice-lg" id="free-review-btn">✏️ 随时练习一遍</button>`
+        : ''}
     </div>`;
+    if (activeCount > 0) {
+      document.getElementById('free-review-btn').addEventListener('click', startFreeReview);
+    }
     return;
   }
 
+  showReviewCard();
+}
+
+function startFreeReview() {
+  freeReviewMode = true;
+  reviewQueue = words.filter(w => !isMastered(w)).sort(() => Math.random() - 0.5);
+  reviewIndex = 0;
+  reviewCorrect = 0;
+  reviewFlipped = false;
   showReviewCard();
 }
 
@@ -578,7 +595,7 @@ function showReviewCard() {
 
   body.innerHTML = `
     <div class="progress-bar-wrap">
-      <p class="progress-label">${reviewIndex + 1} / ${reviewQueue.length}</p>
+      <p class="progress-label">${reviewIndex + 1} / ${reviewQueue.length}${freeReviewMode ? ' &nbsp;<span class="practice-badge">✏️ 练习</span>' : ''}</p>
       <div class="progress-track">
         <div class="progress-fill" style="width:${(reviewIndex + 1) / reviewQueue.length * 100}%"></div>
       </div>
@@ -622,12 +639,15 @@ function showReviewCard() {
 
 async function answer(correct) {
   const word = reviewQueue[reviewIndex];
-  const wasMasteredJustNow = !isMastered(word) && correct && word.reviewStage === 5;
-  recordReview(word, correct);
-  await updateWord(word);
-  if (correct) {
-    reviewCorrect++;
-    celebrate(wasMasteredJustNow ? 60 : 20);
+  if (freeReviewMode) {
+    // 练习模式：只记分，不改艾宾浩斯进度
+    if (correct) { reviewCorrect++; celebrate(20); }
+  } else {
+    // 正式复习：更新进度
+    const wasMasteredJustNow = !isMastered(word) && correct && word.reviewStage === 5;
+    recordReview(word, correct);
+    await updateWord(word);
+    if (correct) { reviewCorrect++; celebrate(wasMasteredJustNow ? 60 : 20); }
   }
   reviewIndex++;
   showReviewCard();
@@ -648,7 +668,8 @@ function showSessionDone() {
       <button class="btn-primary-lg" id="restart-btn">再来一轮 →</button>
     </div>`;
 
-  document.getElementById('restart-btn').addEventListener('click', renderReview);
+  document.getElementById('restart-btn').addEventListener('click',
+    freeReviewMode ? startFreeReview : renderReview);
   celebrate(50);
 }
 

@@ -613,6 +613,35 @@ header h1 {
 }
 .btn-primary-lg:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--orange); }
 
+/* ── 练习模式按钮（薰衣草紫，区别于正式复习的黄色） ── */
+.btn-practice-lg {
+  margin-top: 24px;
+  padding: 16px 44px;
+  background: linear-gradient(135deg, var(--lavender) 0%, #7c6fe0 100%);
+  color: #fff;
+  border: none;
+  border-radius: 28px;
+  font-size: 18px;
+  font-weight: 900;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #5c50b0, var(--shadow-soft);
+  transition: all 0.1s;
+}
+.btn-practice-lg:active { transform: translateY(3px); box-shadow: 0 2px 0 #5c50b0; }
+
+/* ── 练习模式进度栏小标签 ── */
+.practice-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--lavender);
+  color: #fff;
+  padding: 2px 10px;
+  border-radius: 20px;
+  vertical-align: middle;
+}
+
 /* ── Modal ── */
 .modal {
   position: fixed;
