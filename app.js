@@ -958,7 +958,7 @@ async function loadSentences() {
   sentences = await DB.getAllSentences();
   // 从仓库加载家长在电脑上设定的句子
   try {
-    const res = await fetch('./sentences.json');
+    const res = await fetch('./sentences.json', { cache: 'no-cache' });
     if (res.ok) presetSentences = await res.json();
   } catch (e) { presetSentences = []; }
 }
