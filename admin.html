@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>句子管理 — 咚咚英语王国</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
+      background: #f3f0ff;
+      color: #1a1a2e;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    .page { max-width: 660px; margin: 0 auto; }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 900;
+      color: #5b21b6;
+      margin-bottom: 6px;
+    }
+    .subtitle { color: #777; font-size: 14px; margin-bottom: 24px; }
+
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 12px rgba(91,33,182,.08);
+    }
+    .card h2 {
+      font-size: 17px;
+      font-weight: 800;
+      color: #374151;
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: #6b7280;
+      margin-bottom: 6px;
+      margin-top: 12px;
+    }
+    label:first-child { margin-top: 0; }
+
+    input[type=text], input[type=password] {
+      width: 100%;
+      padding: 13px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      font-size: 15px;
+      font-family: inherit;
+      color: #111;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus { border-color: #7c3aed; }
+
+    .tip {
+      background: #fffbeb;
+      border: 1.5px solid #fcd34d;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+    .tip strong { color: #5b21b6; }
+    .tip a { color: #7c3aed; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 13px 24px;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary  { background: #7c3aed; color: #fff; }
+    .btn-primary:hover { background: #6d28d9; }
+    .btn-save    { background: #059669; color: #fff; width: 100%; justify-content: center; font-size: 17px; padding: 16px; }
+    .btn-save:hover { background: #047857; }
+    .btn-ghost   { background: #f3f4f6; color: #374151; }
+    .btn-ghost:hover { background: #e5e7eb; }
+    .btn-del     { background: #fee2e2; color: #dc2626; padding: 7px 14px; font-size: 13px; border-radius: 8px; }
+    .btn-del:hover { background: #fecaca; }
+
+    .status {
+      padding: 13px 18px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .status.show { display: block; }
+    .status.ok   { background: #d1fae5; color: #065f46; }
+    .status.err  { background: #fee2e2; color: #991b1b; }
+    .status.busy { background: #ede9fe; color: #5b21b6; }
+
+    .add-row { display: flex; gap: 10px; align-items: flex-end; margin-top: 4px; }
+    .add-row .fields { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .add-row input { margin: 0; }
+
+    .sentence-list { margin-top: 8px; }
+    .sentence-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 13px 0;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .sentence-item:last-child { border-bottom: none; }
+    .sentence-body { flex: 1; min-width: 0; }
+    .s-en { font-size: 16px; font-weight: 700; color: #111; line-height: 1.4; }
+    .s-zh { font-size: 13px; color: #6b7280; margin-top: 3px; }
+
+    .count-badge {
+      display: inline-block;
+      background: #ede9fe;
+      color: #5b21b6;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 2px 10px;
+      border-radius: 99px;
+      margin-left: 8px;
+    }
+
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .reset-link {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      text-decoration: underline;
+    }
+
+    .empty-hint {
+      text-align: center;
+      color: #9ca3af;
+      font-size: 15px;
+      padding: 24px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>🎧 句子管理</h1>
+  <p class="subtitle">咚咚英语王国 · 家长端</p>
+
+  <!-- ── 初次设置 ── -->
+  <div id="section-setup" class="card" style="display:none">
+    <h2>⚙️ 首次设置（只需一次）</h2>
+
+    <div class="tip">
+      需要一个 GitHub 个人令牌才能直接保存修改。<br>
+      获取步骤：登录 GitHub →
+      <strong>头像</strong> → <strong>Settings</strong> →
+      左侧 <strong>Developer settings</strong> →
+      <strong>Personal access tokens → Tokens (classic)</strong> →
+      <strong>Generate new token</strong><br>
+      备注随便填，勾选 <strong>repo</strong> 权限 → 生成 → 复制粘贴到下方。
+    </div>
+
+    <label>GitHub 用户名</label>
+    <input type="text" id="cfg-user" placeholder="例如：maggie123">
+
+    <label>仓库名</label>
+    <input type="text" id="cfg-repo" placeholder="vocabmaster">
+
+    <label>Personal Access Token</label>
+    <input type="password" id="cfg-token" placeholder="ghp_xxxxxxxxxxxxxxxx">
+
+    <br><br>
+    <button class="btn btn-primary" onclick="saveConfig()">✅ 保存设置，开始使用</button>
+  </div>
+
+  <!-- ── 主界面 ── -->
+  <div id="section-main" style="display:none">
+
+    <div id="status" class="status"></div>
+
+    <!-- 添加句子 -->
+    <div class="card">
+      <h2>➕ 添加句子</h2>
+      <div class="add-row">
+        <div class="fields">
+          <input type="text" id="new-en" placeholder="英文句子，例如：I love reading books.">
+          <input type="text" id="new-zh" placeholder="中文意思（可选）例如：我喜欢读书。">
+        </div>
+        <button class="btn btn-primary" style="height:48px;margin-bottom:0" onclick="addSentence()">添加</button>
+      </div>
+    </div>
+
+    <!-- 句子列表 -->
+    <div class="card">
+      <h2>
+        📋 句子列表
+        <span class="count-badge" id="count">0</span>
+      </h2>
+      <div class="sentence-list" id="sentence-list"></div>
+    </div>
+
+    <!-- 保存 -->
+    <button class="btn btn-save" onclick="saveToGitHub()">💾 保存到 GitHub（孩子下次打开 App 即生效）</button>
+
+    <div class="footer-row">
+      <span style="color:#9ca3af;font-size:13px">修改后记得点保存 ↑</span>
+      <button class="reset-link" onclick="resetConfig()">重置设置 / 更换账号</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+'use strict';
+
+let sentences = [];
+let fileSha   = '';
+const LS = localStorage;
+
+/* ── 配置 ── */
+function saveConfig() {
+  const user  = document.getElementById('cfg-user').value.trim();
+  const repo  = document.getElementById('cfg-repo').value.trim() || 'vocabmaster';
+  const token = document.getElementById('cfg-token').value.trim();
+  if (!user || !token) { alert('请填写用户名和 Token'); return; }
+  LS.setItem('gh_user',  user);
+  LS.setItem('gh_repo',  repo);
+  LS.setItem('gh_token', token);
+  showMain();
+}
+
+function resetConfig() {
+  if (!confirm('清除设置？需要重新填写 Token。')) return;
+  ['gh_user','gh_repo','gh_token'].forEach(k => LS.removeItem(k));
+  location.reload();
+}
+
+function cfg() {
+  return { user: LS.getItem('gh_user'), repo: LS.getItem('gh_repo') || 'vocabmaster', token: LS.getItem('gh_token') };
+}
+
+/* ── UI ── */
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = `status show ${type}`;
+  if (type === 'ok') setTimeout(() => el.className = 'status', 3000);
+}
+
+function renderList() {
+  document.getElementById('count').textContent = sentences.length;
+  const list = document.getElementById('sentence-list');
+  if (!sentences.length) {
+    list.innerHTML = '<p class="empty-hint">还没有句子，在上方添加吧 ✨</p>';
+    return;
+  }
+  list.innerHTML = sentences.map((s, i) => `
+    <div class="sentence-item">
+      <div class="sentence-body">
+        <div class="s-en">${esc(s.english)}</div>
+        ${s.chinese ? `<div class="s-zh">${esc(s.chinese)}</div>` : ''}
+      </div>
+      <button class="btn btn-del" onclick="del(${i})">删除</button>
+    </div>`).join('');
+}
+
+/* ── 操作 ── */
+function addSentence() {
+  const en = document.getElementById('new-en').value.trim();
+  const zh = document.getElementById('new-zh').value.trim();
+  if (!en) { alert('请输入英文句子'); return; }
+  if (sentences.some(s => s.english.toLowerCase() === en.toLowerCase())) {
+    alert('这句话已经在列表里了'); return;
+  }
+  sentences.push({ id: 'preset-' + Date.now(), english: en, chinese: zh });
+  document.getElementById('new-en').value = '';
+  document.getElementById('new-zh').value = '';
+  renderList();
+  document.getElementById('new-en').focus();
+}
+
+function del(i) {
+  if (!confirm(`删除「${sentences[i].english}」？`)) return;
+  sentences.splice(i, 1);
+  renderList();
+}
+
+/* ── GitHub API ── */
+async function loadFromGitHub() {
+  showStatus('正在加载…', 'busy');
+  const { user, repo, token } = cfg();
+  try {
+    const res  = await fetch(
+      `https://api.github.com/repos/${user}/${repo}/contents/sentences.json`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+    );
+    if (!res.ok) {
+      const e = await res.json();
+      throw new Error(e.message || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    fileSha    = data.sha;
+    // GitHub 返回的 content 是 base64，含换行符
+    const raw  = data.content.replace(/\n/g, '');
+    sentences  = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    renderList();
+    showStatus(`加载成功，共 ${sentences.length} 句 ✓`, 'ok');
+  } catch (e) {
+    showStatus('❌ 加载失败：' + e.message + '  （请检查用户名 / 仓库名 / Token）', 'err');
+  }
+}
+
+async function saveToGitHub() {
+  showStatus('正在保存…', 'busy');
+  const { user, repo, token } = cfg();
+  const json    = JSON.stringify(sentences, null, 2);
+  const encoded = btoa(unescape(encodeURIComponent(json)));
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${user}/${repo}/contents/sentences.json`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: '更新句子库', content: encoded, sha: fileSha }),
+      }
+    );
+    if (!res.ok) { const e = await res.json(); throw new Error(e.message); }
+    const data = await res.json();
+    fileSha = data.content.sha;
+    showStatus('✅ 已保存！孩子下次打开 App 即可看到新句子。', 'ok');
+  } catch (e) {
+    showStatus('❌ 保存失败：' + e.message, 'err');
+  }
+}
+
+/* ── 启动 ── */
+function showMain() {
+  document.getElementById('section-setup').style.display = 'none';
+  document.getElementById('section-main').style.display  = 'block';
+  loadFromGitHub();
+}
+
+window.addEventListener('load', () => {
+  if (LS.getItem('gh_token') && LS.getItem('gh_user')) {
+    showMain();
+  } else {
+    document.getElementById('section-setup').style.display = 'block';
+    const savedRepo = LS.getItem('gh_repo');
+    if (savedRepo) document.getElementById('cfg-repo').value = savedRepo;
+  }
+});
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

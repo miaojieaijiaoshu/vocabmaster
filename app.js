@@ -91,7 +91,7 @@ function createWord(english, chineseDefinition, phonetic = '') {
     chineseDefinition,
     phonetic,
     dateAdded: new Date().toISOString(),
-    nextReviewDate: addDays(new Date(), 1).toISOString(),
+    nextReviewDate: new Date().toISOString(),  // 当天添加，当天可复习
     reviewStage: 0,
     totalReviews: 0,
   };
@@ -766,20 +766,18 @@ function renderReview() {
   const body = document.getElementById('review-body');
 
   if (reviewQueue.length === 0) {
-    const activeCount = words.filter(w => !isMastered(w)).length;
-    body.innerHTML = `<div class="review-empty">
-      <div class="review-empty-emoji">🌈</div>
-      <h2>今天没有要复习的</h2>
-      <p>${activeCount > 0
-        ? `还有 ${activeCount} 个单词在学习中<br>明天再来挑战吧 💪`
-        : '快去查词页面添加新单词吧 ✨'}</p>
-      ${activeCount > 0
-        ? `<button class="btn-practice-lg" id="free-review-btn">✏️ 随时练习一遍</button>`
-        : ''}
-    </div>`;
-    if (activeCount > 0) {
-      document.getElementById('free-review-btn').addEventListener('click', startFreeReview);
+    const unmastered = words.filter(w => !isMastered(w));
+    if (unmastered.length > 0) {
+      // 今天没有到期词，但还有未掌握的词 → 直接进入随时练习，保证每天有内容
+      startFreeReview();
+      return;
     }
+    // 所有词都已掌握
+    body.innerHTML = `<div class="review-empty">
+      <div class="review-empty-emoji">🏆</div>
+      <h2>全部掌握啦！</h2>
+      <p>太厉害了！去查词页面添加新单词吧 ✨</p>
+    </div>`;
     return;
   }
 
@@ -953,10 +951,25 @@ function esc(str) {
 // ════════════════════════════════════════════
 // 11. SENTENCE BANK & LISTENING TEST
 // ════════════════════════════════════════════
-let sentences = [];
+let sentences = [];        // 本地 IndexedDB（iPad 上手动添加）
+let presetSentences = [];  // 来自 sentences.json（电脑端管理）
 
 async function loadSentences() {
   sentences = await DB.getAllSentences();
+  // 从仓库加载家长在电脑上设定的句子
+  try {
+    const res = await fetch('./sentences.json');
+    if (res.ok) presetSentences = await res.json();
+  } catch (e) { presetSentences = []; }
+}
+
+// 合并去重（以英文原句为 key，本地已有的不重复显示预设）
+function allSentences() {
+  const localSet = new Set(sentences.map(s => s.english.toLowerCase().trim()));
+  const uniquePresets = presetSentences
+    .filter(p => !localSet.has(p.english.toLowerCase().trim()))
+    .map(p => ({ ...p, preset: true }));
+  return [...sentences, ...uniquePresets];
 }
 
 // 英文复述匹配：关键词（去停用词）命中率 ≥ 55% 算过
@@ -1005,24 +1018,28 @@ function renderSentences() {
   const body = document.getElementById('sentences-body');
   if (!body) return;
 
-  if (sentences.length === 0) {
+  const all = allSentences();
+
+  if (all.length === 0) {
     body.innerHTML = `<div class="empty-state">
       <div class="empty-emoji">🎧✨</div>
       <h3>还没有句子</h3>
-      <p>点右上角 + 添加要练习的英文句子</p>
+      <p>点右上角 + 在 iPad 上添加<br>或在电脑上编辑 sentences.json</p>
     </div>`;
     return;
   }
 
   let html = `<button class="btn-practice-lg" id="start-sentence-btn"
-    style="width:100%;margin-bottom:16px">▶ 开始听力测试</button>`;
-  html += sentences.map(s => `
+    style="width:100%;margin-bottom:16px">▶ 开始听力测试（${all.length} 句）</button>`;
+  html += all.map(s => `
     <div class="sentence-row">
       <div class="sentence-info">
         <p class="sentence-en">${esc(s.english)}</p>
         ${s.chinese ? `<p class="sentence-zh">${esc(s.chinese)}</p>` : ''}
       </div>
-      <button class="delete-btn" data-sid="${s.id}" aria-label="删除">🗑️</button>
+      ${s.preset
+        ? `<span class="preset-badge">📌</span>`
+        : `<button class="delete-btn" data-sid="${s.id}" aria-label="删除">🗑️</button>`}
     </div>`).join('');
   body.innerHTML = html;
 
@@ -1037,7 +1054,7 @@ function renderSentences() {
 }
 
 function startSentenceTest() {
-  sentenceQueue = [...sentences].sort(() => Math.random() - 0.5);
+  sentenceQueue = [...allSentences()].sort(() => Math.random() - 0.5);
   sentenceIndex = 0;
   sentenceCorrect = 0;
   showSentenceCard();
