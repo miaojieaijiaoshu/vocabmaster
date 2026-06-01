@@ -972,15 +972,13 @@ function allSentences() {
   return [...sentences, ...uniquePresets];
 }
 
-// 英文复述匹配：关键词（去停用词）命中率 ≥ 55% 算过
+// 英文复述匹配：去标点、统一小写后逐词完全一致才算对
 function matchesEnglish(sentence, spoken) {
-  const STOP = new Set(['a','an','the','is','are','was','were','i','he','she','it','we',
-    'they','in','on','at','to','for','of','and','or','but','this','that','do','does','s']);
-  const keys = (sentence.toLowerCase().match(/[a-z']+/g) || [])
-               .filter(w => !STOP.has(w) && w.length > 2);
-  if (!keys.length) return true;
-  const sp = spoken.toLowerCase();
-  return keys.filter(w => sp.includes(w)).length / keys.length >= 0.55;
+  const normalize = s => s.toLowerCase()
+    .replace(/[^\w\s]/g, '')   // 去掉标点符号
+    .replace(/\s+/g, ' ')      // 合并多余空格
+    .trim();
+  return normalize(sentence) === normalize(spoken);
 }
 
 function initSentences() {
