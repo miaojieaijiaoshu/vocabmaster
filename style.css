@@ -756,6 +756,83 @@ header h1 {
 .error-msg { color: var(--primary-deep); font-size: 14px; font-weight: 700; }
 .error-msg.hidden { display: none; }
 
+/* ── 语音验证卡片（说出意思才算认识 / 句子复述）── */
+.verify-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+}
+.verify-prompt {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text-soft);
+}
+.verify-transcript {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--lavender);
+  min-height: 28px;
+  padding: 8px 16px;
+  background: #F3F0FF;
+  border-radius: var(--radius);
+  width: 100%;
+}
+.verify-skip-btn {
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+}
+.verify-result-icon { font-size: 58px; }
+.verify-msg { font-size: 18px; font-weight: 800; color: var(--text-soft); }
+.verify-answer {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  width: 100%;
+}
+
+/* ── 句子列表 ── */
+.sentence-row {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-soft);
+  gap: 12px;
+}
+.sentence-info { flex: 1; min-width: 0; }
+.sentence-en { font-size: 17px; font-weight: 800; color: var(--text); }
+.sentence-zh { font-size: 13px; font-weight: 700; color: var(--text-soft); margin-top: 4px; }
+
+/* 句子测试结果 */
+.sentence-en-result {
+  font-size: 21px;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1.4;
+}
+.sentence-zh-result {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--sky);
+}
+
 /* ── Confetti ── */
 .confetti {
   position: fixed;

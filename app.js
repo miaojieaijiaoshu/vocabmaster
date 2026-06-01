@@ -8,11 +8,14 @@ const DB = {
 
   init() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('VocabMaster', 1);
+      const req = indexedDB.open('VocabMaster', 2);
       req.onupgradeneeded = e => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains('words')) {
           db.createObjectStore('words', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('sentences')) {
+          db.createObjectStore('sentences', { keyPath: 'id' });
         }
       };
       req.onsuccess = e => { this._db = e.target.result; resolve(); };
@@ -43,6 +46,32 @@ const DB = {
   delete(id) {
     return new Promise((resolve, reject) => {
       const req = this._tx('readwrite').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  // ── sentences store ──
+  _txS(mode) {
+    return this._db.transaction('sentences', mode).objectStore('sentences');
+  },
+  getAllSentences() {
+    return new Promise((resolve, reject) => {
+      const req = this._txS('readonly').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  saveSentence(s) {
+    return new Promise((resolve, reject) => {
+      const req = this._txS('readwrite').put(s);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+  deleteSentence(id) {
+    return new Promise((resolve, reject) => {
+      const req = this._txS('readwrite').delete(id);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -274,8 +303,9 @@ function switchTab(name) {
   document.getElementById(`tab-${name}`).classList.add('active');
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
   currentTab = name;
-  if (name === 'notebook') renderNotebook();
-  if (name === 'review') renderReview();
+  if (name === 'notebook')  renderNotebook();
+  if (name === 'review')    renderReview();
+  if (name === 'sentences') renderSentences();
 }
 
 // ════════════════════════════════════════════
@@ -416,6 +446,89 @@ function playWrongSound() {
   gain.gain.setValueAtTime(0.22, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
   osc.start(now); osc.stop(now + 0.42);
+}
+
+// ════════════════════════════════════════════
+// 语音验证：点"我认识"后说出中文意思才算过
+// ════════════════════════════════════════════
+function matchesChinese(definition, spoken) {
+  // 从释义里提取2字以上的中文词，作为匹配关键词
+  const keys = (definition.replace(/[a-zA-Z]+\./g, '').match(/[一-鿿]{2,}/g) || []);
+  if (!keys.length) return spoken.trim().length > 0;
+  return keys.some(kw => spoken.includes(kw));
+}
+
+function verifyAnswer(word) {
+  const body = document.getElementById('review-body');
+  body.innerHTML = `
+    <div class="verify-card">
+      <p class="flip-word">${esc(word.english)}</p>
+      ${word.phonetic ? `<p class="flip-phonetic">/${esc(word.phonetic)}/</p>` : ''}
+      <p class="verify-prompt">说出这个词的中文意思 🎤</p>
+      <button class="mic-btn" id="verify-mic">🎤</button>
+      <p id="verify-text" class="verify-transcript">点麦克风开始说</p>
+      <button id="verify-skip" class="verify-skip-btn">不会说？看答案</button>
+    </div>`;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { setTimeout(() => answer(true), 300); return; }
+
+  let rec = null;
+
+  function startRec() {
+    rec = new SR();
+    rec.lang = 'zh-CN';
+    rec.continuous = false;
+    rec.interimResults = true;
+
+    rec.onresult = e => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join('');
+      const el = document.getElementById('verify-text');
+      if (el) el.textContent = t || '…';
+    };
+    rec.onend = () => {
+      const el = document.getElementById('verify-text');
+      const text = el ? el.textContent : '';
+      if (!text || text === '点麦克风开始说' || text === '…') {
+        showVerifyResult(word, false);
+      } else {
+        showVerifyResult(word, matchesChinese(word.chineseDefinition, text));
+      }
+    };
+    rec.onerror = () => showVerifyResult(word, false);
+    rec.start();
+    const btn = document.getElementById('verify-mic');
+    if (btn) btn.classList.add('listening');
+    const el = document.getElementById('verify-text');
+    if (el) el.textContent = '正在听…';
+  }
+
+  setTimeout(startRec, 300);
+
+  document.getElementById('verify-mic').addEventListener('click', () => {
+    try { rec?.stop(); } catch(e) {}
+    setTimeout(startRec, 200);
+  });
+  document.getElementById('verify-skip').addEventListener('click', () => {
+    try { rec?.stop(); } catch(e) {}
+    showVerifyResult(word, false);
+  });
+}
+
+function showVerifyResult(word, correct) {
+  const body = document.getElementById('review-body');
+  if (!body) { answer(correct); return; }
+  body.innerHTML = `
+    <div class="verify-card">
+      <div class="verify-result-icon">${correct ? '🎉' : '😅'}</div>
+      <p class="flip-word">${esc(word.english)}</p>
+      ${correct
+        ? `<p class="verify-msg">说对了！👏</p>`
+        : `<p class="verify-msg">这个词的意思是：</p>
+           <p class="verify-answer">${esc(word.chineseDefinition)}</p>`}
+    </div>`;
+  if (correct) celebrate(20);
+  setTimeout(() => answer(correct), correct ? 1000 : 2200);
 }
 
 function setLookupResult(html) {
@@ -758,7 +871,7 @@ function showReviewCard() {
   });
 
   document.getElementById('btn-wrong').addEventListener('click', () => answer(false));
-  document.getElementById('btn-right').addEventListener('click', () => answer(true));
+  document.getElementById('btn-right').addEventListener('click', () => verifyAnswer(word));
 }
 
 async function answer(correct) {
@@ -837,15 +950,208 @@ function esc(str) {
 // ════════════════════════════════════════════
 // 11. BOOT
 // ════════════════════════════════════════════
+// ════════════════════════════════════════════
+// 11. SENTENCE BANK & LISTENING TEST
+// ════════════════════════════════════════════
+let sentences = [];
+
+async function loadSentences() {
+  sentences = await DB.getAllSentences();
+}
+
+// 英文复述匹配：关键词（去停用词）命中率 ≥ 55% 算过
+function matchesEnglish(sentence, spoken) {
+  const STOP = new Set(['a','an','the','is','are','was','were','i','he','she','it','we',
+    'they','in','on','at','to','for','of','and','or','but','this','that','do','does','s']);
+  const keys = (sentence.toLowerCase().match(/[a-z']+/g) || [])
+               .filter(w => !STOP.has(w) && w.length > 2);
+  if (!keys.length) return true;
+  const sp = spoken.toLowerCase();
+  return keys.filter(w => sp.includes(w)).length / keys.length >= 0.55;
+}
+
+function initSentences() {
+  document.getElementById('add-sentence-btn').addEventListener('click', openAddSentenceModal);
+  document.getElementById('cancel-add-sentence').addEventListener('click', closeAddSentenceModal);
+  document.getElementById('add-sentence-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('add-sentence-modal')) closeAddSentenceModal();
+  });
+  document.getElementById('confirm-add-sentence').addEventListener('click', async () => {
+    const en = document.getElementById('add-sentence-en').value.trim();
+    const zh = document.getElementById('add-sentence-zh').value.trim();
+    if (!en) return;
+    const s = { id: crypto.randomUUID(), english: en, chinese: zh, dateAdded: new Date().toISOString() };
+    sentences.push(s);
+    await DB.saveSentence(s);
+    closeAddSentenceModal();
+    renderSentences();
+  });
+}
+
+function openAddSentenceModal() {
+  document.getElementById('add-sentence-en').value = '';
+  document.getElementById('add-sentence-zh').value = '';
+  document.getElementById('add-sentence-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('add-sentence-en').focus(), 100);
+}
+
+function closeAddSentenceModal() {
+  document.getElementById('add-sentence-modal').classList.add('hidden');
+}
+
+let sentenceQueue = [], sentenceIndex = 0, sentenceCorrect = 0;
+
+function renderSentences() {
+  const body = document.getElementById('sentences-body');
+  if (!body) return;
+
+  if (sentences.length === 0) {
+    body.innerHTML = `<div class="empty-state">
+      <div class="empty-emoji">🎧✨</div>
+      <h3>还没有句子</h3>
+      <p>点右上角 + 添加要练习的英文句子</p>
+    </div>`;
+    return;
+  }
+
+  let html = `<button class="btn-practice-lg" id="start-sentence-btn"
+    style="width:100%;margin-bottom:16px">▶ 开始听力测试</button>`;
+  html += sentences.map(s => `
+    <div class="sentence-row">
+      <div class="sentence-info">
+        <p class="sentence-en">${esc(s.english)}</p>
+        ${s.chinese ? `<p class="sentence-zh">${esc(s.chinese)}</p>` : ''}
+      </div>
+      <button class="delete-btn" data-sid="${s.id}" aria-label="删除">🗑️</button>
+    </div>`).join('');
+  body.innerHTML = html;
+
+  document.getElementById('start-sentence-btn').addEventListener('click', startSentenceTest);
+  body.querySelectorAll('[data-sid]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      sentences = sentences.filter(s => s.id !== btn.dataset.sid);
+      await DB.deleteSentence(btn.dataset.sid);
+      renderSentences();
+    });
+  });
+}
+
+function startSentenceTest() {
+  sentenceQueue = [...sentences].sort(() => Math.random() - 0.5);
+  sentenceIndex = 0;
+  sentenceCorrect = 0;
+  showSentenceCard();
+}
+
+function showSentenceCard() {
+  if (sentenceIndex >= sentenceQueue.length) { showSentenceDone(); return; }
+
+  const s = sentenceQueue[sentenceIndex];
+  const body = document.getElementById('sentences-body');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  body.innerHTML = `
+    <div class="progress-bar-wrap">
+      <p class="progress-label">${sentenceIndex + 1} / ${sentenceQueue.length}</p>
+      <div class="progress-track">
+        <div class="progress-fill" style="width:${(sentenceIndex+1)/sentenceQueue.length*100}%"></div>
+      </div>
+    </div>
+    <div class="verify-card" style="margin-top:16px">
+      <p class="verify-prompt">🎧 听句子，然后跟着复述</p>
+      <button class="speak-btn" id="play-sentence-btn"
+        style="width:72px;height:72px;font-size:36px">🔊</button>
+      <button class="mic-btn" id="sentence-mic-btn">🎤</button>
+      <p id="sentence-text" class="verify-transcript">先点 🔊 听，再点 🎤 复述</p>
+      <button id="sentence-skip-btn" class="verify-skip-btn">跳过，看原句</button>
+    </div>`;
+
+  speak(s.english);
+  document.getElementById('play-sentence-btn').addEventListener('click', () => speak(s.english));
+
+  let srec = null;
+  function startSRec() {
+    if (!SR) { showSentenceResult(s, false); return; }
+    srec = new SR();
+    srec.lang = 'en-US';
+    srec.continuous = false;
+    srec.interimResults = true;
+
+    srec.onresult = e => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join('');
+      const el = document.getElementById('sentence-text');
+      if (el) el.textContent = t || '…';
+    };
+    srec.onend = () => {
+      const el = document.getElementById('sentence-text');
+      const text = el ? el.textContent : '';
+      if (!text || text === '先点 🔊 听，再点 🎤 复述' || text === '…') {
+        showSentenceResult(s, false);
+      } else {
+        showSentenceResult(s, matchesEnglish(s.english, text));
+      }
+    };
+    srec.onerror = () => showSentenceResult(s, false);
+    srec.start();
+    const btn = document.getElementById('sentence-mic-btn');
+    if (btn) btn.classList.add('listening');
+    const el = document.getElementById('sentence-text');
+    if (el) el.textContent = '正在听…';
+  }
+
+  document.getElementById('sentence-mic-btn').addEventListener('click', () => {
+    try { srec?.stop(); } catch(e) {}
+    setTimeout(startSRec, 200);
+  });
+  document.getElementById('sentence-skip-btn').addEventListener('click', () => {
+    try { srec?.stop(); } catch(e) {}
+    showSentenceResult(s, false);
+  });
+}
+
+function showSentenceResult(s, correct) {
+  if (correct) { sentenceCorrect++; celebrate(20); playCorrectSound(); }
+  else { playWrongSound(); }
+
+  const body = document.getElementById('sentences-body');
+  body.innerHTML = `
+    <div class="verify-card">
+      <div class="verify-result-icon">${correct ? '🎉' : '😅'}</div>
+      <p class="verify-msg">${correct ? '复述正确！' : '原句是：'}</p>
+      <p class="sentence-en-result">${esc(s.english)}</p>
+      ${s.chinese ? `<p class="sentence-zh-result">${esc(s.chinese)}</p>` : ''}
+    </div>`;
+  setTimeout(() => { sentenceIndex++; showSentenceCard(); }, correct ? 1200 : 2400);
+}
+
+function showSentenceDone() {
+  const total = sentenceQueue.length, correct = sentenceCorrect;
+  const ratio = correct / total;
+  const emoji = ratio >= 0.9 ? '🏆' : ratio >= 0.6 ? '🌟' : '💪';
+  const msg   = ratio >= 0.9 ? '你真是小天才！' : ratio >= 0.6 ? '做得很棒！' : '再练练吧！';
+
+  document.getElementById('sentences-body').innerHTML = `
+    <div class="session-done">
+      <div class="session-emoji">${emoji}</div>
+      <h2>${msg}</h2>
+      <p>答对了 ${correct} / ${total} 句 🎯</p>
+      <button class="btn-primary-lg" id="sentence-again-btn">再来一遍 →</button>
+    </div>`;
+  celebrate(50);
+  document.getElementById('sentence-again-btn').addEventListener('click', startSentenceTest);
+}
+
 async function boot() {
   await DB.init();
   await loadWords();
+  await loadSentences();
   loadEcdict(); // 后台预加载 ECDICT 词典，不阻塞启动
 
   initLookup();
   initNotebook();
   initModal();
   initEditModal();
+  initSentences();
   initReview();
   updateBadges();
 

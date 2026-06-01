@@ -51,6 +51,15 @@
     <div class="tab-body" id="review-body"></div>
   </div>
 
+  <!-- ── 听句子 ── -->
+  <div id="tab-sentences" class="tab-page">
+    <header>
+      <h1>🎧 听句子</h1>
+      <button id="add-sentence-btn" class="icon-btn" aria-label="添加句子">+</button>
+    </header>
+    <div class="tab-body" id="sentences-body"></div>
+  </div>
+
   <!-- 底部标签栏 -->
   <nav id="tab-bar">
     <button class="tab-btn active" data-tab="lookup">
@@ -66,6 +75,10 @@
       <span class="tab-emoji">🎯</span>
       <span>复习</span>
       <span id="review-badge" class="badge hidden"></span>
+    </button>
+    <button class="tab-btn" data-tab="sentences">
+      <span class="tab-emoji">🎧</span>
+      <span>听句子</span>
     </button>
   </nav>
 </div>
@@ -83,6 +96,21 @@
       <div style="flex:1"></div>
       <button id="cancel-add" class="btn-secondary">取消</button>
       <button id="confirm-add" class="btn-primary">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 添加句子弹窗 -->
+<div id="add-sentence-modal" class="modal hidden">
+  <div class="modal-card">
+    <h2>➕ 添加句子</h2>
+    <input id="add-sentence-en" type="text" placeholder="英文句子"
+           autocomplete="off" autocorrect="off" spellcheck="false">
+    <input id="add-sentence-zh" type="text" placeholder="中文意思（可选）">
+    <div class="modal-row">
+      <div style="flex:1"></div>
+      <button id="cancel-add-sentence" class="btn-secondary">取消</button>
+      <button id="confirm-add-sentence" class="btn-primary">添加</button>
     </div>
   </div>
 </div>
