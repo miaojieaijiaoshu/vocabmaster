@@ -819,6 +819,7 @@ header h1 {
 .sentence-info { flex: 1; min-width: 0; }
 .sentence-en { font-size: 17px; font-weight: 800; color: var(--text); }
 .sentence-zh { font-size: 13px; font-weight: 700; color: var(--text-soft); margin-top: 4px; }
+.preset-badge { font-size: 18px; flex-shrink: 0; opacity: 0.5; }
 
 /* 句子测试结果 */
 .sentence-en-result {

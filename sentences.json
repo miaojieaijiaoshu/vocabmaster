@@ -1,0 +1,17 @@
+[
+  {
+    "id": "preset-1",
+    "english": "What is your name?",
+    "chinese": "你叫什么名字？"
+  },
+  {
+    "id": "preset-2",
+    "english": "I like to read books.",
+    "chinese": "我喜欢读书。"
+  },
+  {
+    "id": "preset-3",
+    "english": "The cat is sleeping on the sofa.",
+    "chinese": "猫睡在沙发上。"
+  }
+]
