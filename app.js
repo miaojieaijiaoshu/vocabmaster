@@ -8,7 +8,7 @@ const DB = {
 
   init() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('VocabMaster', 2);
+      const req = indexedDB.open('VocabMaster', 3);
       req.onupgradeneeded = e => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains('words')) {
@@ -16,6 +16,9 @@ const DB = {
         }
         if (!db.objectStoreNames.contains('sentences')) {
           db.createObjectStore('sentences', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('sentenceProgress')) {
+          db.createObjectStore('sentenceProgress', { keyPath: 'id' });
         }
       };
       req.onsuccess = e => { this._db = e.target.result; resolve(); };
@@ -72,6 +75,25 @@ const DB = {
   deleteSentence(id) {
     return new Promise((resolve, reject) => {
       const req = this._txS('readwrite').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  // ── sentenceProgress store ──
+  _txSP(mode) {
+    return this._db.transaction('sentenceProgress', mode).objectStore('sentenceProgress');
+  },
+  getAllSentenceProgress() {
+    return new Promise((resolve, reject) => {
+      const req = this._txSP('readonly').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  saveSentenceProgress(p) {
+    return new Promise((resolve, reject) => {
+      const req = this._txSP('readwrite').put(p);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -452,10 +474,13 @@ function playWrongSound() {
 // 语音验证：点"我认识"后说出中文意思才算过
 // ════════════════════════════════════════════
 function matchesChinese(definition, spoken) {
-  // 从释义里提取2字以上的中文词，作为匹配关键词
-  const keys = (definition.replace(/[a-zA-Z]+\./g, '').match(/[一-鿿]{2,}/g) || []);
+  // 提取释义里所有中文词（含单字）作为关键词
+  const keys = (definition.replace(/[a-zA-Z]+\./g, '').match(/[一-鿿]+/g) || []);
   if (!keys.length) return spoken.trim().length > 0;
-  return keys.some(kw => spoken.includes(kw));
+  const sp = spoken.trim();
+  if (!sp) return false;
+  // 说出的包含关键词，或关键词包含说出的（如说"猜"能匹配"猜测"）
+  return keys.some(kw => sp.includes(kw) || kw.includes(sp));
 }
 
 function verifyAnswer(word) {
@@ -758,21 +783,15 @@ function renderReview() {
   reviewWrongWords = [];
   firstPassTotal = 0;
   firstPassCorrect = 0;
-  reviewQueue = words.filter(needsReview).sort(() => Math.random() - 0.5);
   reviewIndex = 0;
   reviewCorrect = 0;
   reviewFlipped = false;
 
   const body = document.getElementById('review-body');
+  const scheduled  = words.filter(needsReview);
+  const unmastered = words.filter(w => !isMastered(w));
 
-  if (reviewQueue.length === 0) {
-    const unmastered = words.filter(w => !isMastered(w));
-    if (unmastered.length > 0) {
-      // 今天没有到期词，但还有未掌握的词 → 直接进入随时练习，保证每天有内容
-      startFreeReview();
-      return;
-    }
-    // 所有词都已掌握
+  if (unmastered.length === 0) {
     body.innerHTML = `<div class="review-empty">
       <div class="review-empty-emoji">🏆</div>
       <h2>全部掌握啦！</h2>
@@ -781,7 +800,46 @@ function renderReview() {
     return;
   }
 
-  showReviewCard();
+  if (scheduled.length > 0) {
+    reviewQueue = scheduled.sort(() => Math.random() - 0.5);
+  } else {
+    freeReviewMode = true;
+    reviewQueue = unmastered.sort(() => Math.random() - 0.5);
+  }
+
+  showReviewIntro(scheduled.length, unmastered.length);
+}
+
+function showReviewIntro(dueCount, totalUnmastered) {
+  const body = document.getElementById('review-body');
+  const count   = freeReviewMode ? totalUnmastered : dueCount;
+  const timeEst = Math.max(1, Math.ceil(count * 0.5));
+  const title   = freeReviewMode ? '✏️ 随时练习' : '🎯 今日复习';
+  const note    = freeReviewMode ? '<p class="intro-note">今天没有到期词，练习全部未掌握的词</p>' : '';
+
+  body.innerHTML = `
+    <div class="review-intro">
+      <h2 class="intro-title">${title}</h2>
+      ${streakChipHTML()}
+      ${note}
+      <div class="intro-stats">
+        <div class="stat-item">
+          <span class="stat-num">${count}</span>
+          <span class="stat-label">本次词数</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num">${totalUnmastered}</span>
+          <span class="stat-label">待掌握</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num">~${timeEst}分</span>
+          <span class="stat-label">预计用时</span>
+        </div>
+      </div>
+      <button class="btn-primary-lg" id="start-review-btn">开始 →</button>
+    </div>`;
+
+  document.getElementById('start-review-btn').addEventListener('click', showReviewCard);
 }
 
 function startFreeReview() {
@@ -899,22 +957,38 @@ async function answer(correct) {
 }
 
 function showSessionDone() {
-  const total   = firstPassTotal   || reviewQueue.length;
-  const correct = firstPassCorrect || reviewCorrect;
-  const ratio = correct / total;
+  const total      = firstPassTotal   || reviewQueue.length;
+  const correct    = firstPassCorrect || reviewCorrect;
+  const ratio      = correct / total;
+  const unmastered = words.filter(w => !isMastered(w)).length;
+
   const emoji = ratio >= 0.9 ? '🏆' : ratio >= 0.6 ? '🌟' : '💪';
-  const msg = ratio >= 0.9 ? '你真是个小天才！' : ratio >= 0.6 ? '做得很棒！' : '继续加油！';
+  const msg   = ratio >= 0.9 ? '你真是个小天才！' : ratio >= 0.6 ? '做得很棒！' : '继续加油！';
+
+  const motivateHTML = unmastered > 0 ? `
+    <div class="motivation-block">
+      <p class="motivation-text">还有 <strong>${unmastered}</strong> 个词还没掌握</p>
+      <p class="motivation-sub">再练一遍，记忆更牢固 💡</p>
+      <button class="btn-practice-lg" id="practice-again-btn" style="margin-top:4px">✏️ 再练一遍</button>
+    </div>` : `<p style="color:var(--mint);font-weight:800;margin-top:6px">🏆 所有词都掌握了！</p>`;
+
+  const streakBlock = streakDoneHTML();
 
   document.getElementById('review-body').innerHTML = `
     <div class="session-done">
       <div class="session-emoji">${emoji}</div>
       <h2>${msg}</h2>
       <p>答对了 ${correct} / ${total} 个 🎯</p>
+      ${streakBlock}
       <button class="btn-primary-lg" id="restart-btn">再来一轮 →</button>
+      ${motivateHTML}
     </div>`;
 
   document.getElementById('restart-btn').addEventListener('click',
     freeReviewMode ? startFreeReview : renderReview);
+  if (unmastered > 0) {
+    document.getElementById('practice-again-btn').addEventListener('click', startFreeReview);
+  }
   celebrate(50);
 }
 
@@ -953,6 +1027,27 @@ function esc(str) {
 // ════════════════════════════════════════════
 let sentences = [];        // 本地 IndexedDB（iPad 上手动添加）
 let presetSentences = [];  // 来自 sentences.json（电脑端管理）
+
+// ── 句子掌握度（连续答对 3 次即掌握）──
+const SENTENCE_MASTERY = 3;
+let sentenceProgress = {};   // { [id]: { id, correctCount } }
+
+async function loadSentenceProgress() {
+  const arr = await DB.getAllSentenceProgress();
+  sentenceProgress = {};
+  arr.forEach(p => sentenceProgress[p.id] = p);
+}
+
+function isSentenceMastered(id) {
+  return (sentenceProgress[id]?.correctCount || 0) >= SENTENCE_MASTERY;
+}
+
+function recordSentenceCorrect(id) {
+  const prog = sentenceProgress[id] || { id, correctCount: 0 };
+  prog.correctCount = (prog.correctCount || 0) + 1;
+  sentenceProgress[id] = prog;
+  DB.saveSentenceProgress(prog).catch(() => {});
+}
 
 async function loadSentences() {
   sentences = await DB.getAllSentences();
@@ -1027,18 +1122,26 @@ function renderSentences() {
     return;
   }
 
+  const unmasteredCount = all.filter(s => !isSentenceMastered(s.id)).length;
   let html = `<button class="btn-practice-lg" id="start-sentence-btn"
-    style="width:100%;margin-bottom:16px">▶ 开始听力测试（${all.length} 句）</button>`;
-  html += all.map(s => `
-    <div class="sentence-row">
+    style="width:100%;margin-bottom:16px">▶ 开始听力测试（${unmasteredCount} 句未掌握）</button>`;
+  html += all.map(s => {
+    const count    = sentenceProgress[s.id]?.correctCount || 0;
+    const mastered = isSentenceMastered(s.id);
+    const stars    = '⭐'.repeat(Math.min(count, SENTENCE_MASTERY)) +
+                     '☆'.repeat(Math.max(0, SENTENCE_MASTERY - count));
+    return `
+    <div class="sentence-row${mastered ? ' mastered' : ''}">
       <div class="sentence-info">
         <p class="sentence-en">${esc(s.english)}</p>
         ${s.chinese ? `<p class="sentence-zh">${esc(s.chinese)}</p>` : ''}
+        <p class="sentence-stars">${stars}${mastered ? ' 已掌握' : ''}</p>
       </div>
       ${s.preset
         ? `<span class="preset-badge">📌</span>`
         : `<button class="delete-btn" data-sid="${s.id}" aria-label="删除">🗑️</button>`}
-    </div>`).join('');
+    </div>`;
+  }).join('');
   body.innerHTML = html;
 
   document.getElementById('start-sentence-btn').addEventListener('click', startSentenceTest);
@@ -1052,7 +1155,18 @@ function renderSentences() {
 }
 
 function startSentenceTest() {
-  sentenceQueue = [...allSentences()].sort(() => Math.random() - 0.5);
+  const unmastered = allSentences().filter(s => !isSentenceMastered(s.id));
+  if (unmastered.length === 0) {
+    document.getElementById('sentences-body').innerHTML = `
+      <div class="session-done">
+        <div class="session-emoji">🏆</div>
+        <h2>所有句子都掌握啦！</h2>
+        <p>可以在管理页面添加新句子 ✨</p>
+      </div>`;
+    celebrate(50);
+    return;
+  }
+  sentenceQueue = unmastered.sort(() => Math.random() - 0.5);
   sentenceIndex = 0;
   sentenceCorrect = 0;
   showSentenceCard();
@@ -1128,15 +1242,21 @@ function showSentenceResult(s, correct) {
   if (correct) { sentenceCorrect++; celebrate(20); playCorrectSound(); }
   else { playWrongSound(); }
 
+  const wasMastered = isSentenceMastered(s.id);
+  if (correct) recordSentenceCorrect(s.id);
+  const justMastered = correct && !wasMastered && isSentenceMastered(s.id);
+
   const body = document.getElementById('sentences-body');
   body.innerHTML = `
     <div class="verify-card">
-      <div class="verify-result-icon">${correct ? '🎉' : '😅'}</div>
+      <div class="verify-result-icon">${justMastered ? '🎓' : correct ? '🎉' : '😅'}</div>
+      ${justMastered ? `<p class="verify-msg" style="color:var(--mint);font-weight:900">句子已掌握！⭐⭐⭐</p>` : ''}
       <p class="verify-msg">${correct ? '复述正确！' : '原句是：'}</p>
       <p class="sentence-en-result">${esc(s.english)}</p>
       ${s.chinese ? `<p class="sentence-zh-result">${esc(s.chinese)}</p>` : ''}
     </div>`;
-  setTimeout(() => { sentenceIndex++; showSentenceCard(); }, correct ? 1200 : 2400);
+  setTimeout(() => { sentenceIndex++; showSentenceCard(); },
+    justMastered ? 2200 : correct ? 1200 : 2400);
 }
 
 function showSentenceDone() {
@@ -1150,16 +1270,107 @@ function showSentenceDone() {
       <div class="session-emoji">${emoji}</div>
       <h2>${msg}</h2>
       <p>答对了 ${correct} / ${total} 句 🎯</p>
+      ${streakDoneHTML()}
       <button class="btn-primary-lg" id="sentence-again-btn">再来一遍 →</button>
     </div>`;
   celebrate(50);
   document.getElementById('sentence-again-btn').addEventListener('click', startSentenceTest);
 }
 
+// ════════════════════════════════════════════
+// 12. 连续打卡 & 积分系统
+// ════════════════════════════════════════════
+const STREAK_MILESTONES = [
+  { days:  5, points:  5 },
+  { days: 10, points: 10 },
+  { days: 20, points: 20 },
+  { days: 30, points: 50 },
+  { days: 60, points: 100 },
+];
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);  // YYYY-MM-DD
+}
+
+function getStreakData() {
+  try { return JSON.parse(localStorage.getItem('streakData')) || _emptyStreak(); }
+  catch { return _emptyStreak(); }
+}
+
+function _emptyStreak() {
+  return { lastDate: null, streak: 0, longest: 0, totalPoints: 0, milestones: [] };
+}
+
+function saveStreakData(d) {
+  localStorage.setItem('streakData', JSON.stringify(d));
+}
+
+// 记录今天已练习，返回 { data, newMilestones }
+function markPracticeToday() {
+  const d = getStreakData();
+  const today = todayStr();
+  if (d.lastDate === today) return { data: d, newMilestones: [] }; // 今天已打卡
+
+  const prev = new Date();
+  prev.setDate(prev.getDate() - 1);
+  const yesterday = prev.toISOString().slice(0, 10);
+
+  d.streak  = (d.lastDate === yesterday) ? d.streak + 1 : 1;
+  d.lastDate = today;
+  d.longest  = Math.max(d.longest, d.streak);
+
+  const newMilestones = [];
+  for (const m of STREAK_MILESTONES) {
+    if (d.streak >= m.days && !d.milestones.includes(m.days)) {
+      d.milestones.push(m.days);
+      d.totalPoints += m.points;
+      newMilestones.push(m);
+    }
+  }
+  saveStreakData(d);
+  return { data: d, newMilestones };
+}
+
+// 导览页上用的小标签（只读，不打卡）
+function streakChipHTML() {
+  const d = getStreakData();
+  if (!d.lastDate) return '';
+  const today = todayStr();
+  const active = d.lastDate === today;
+  return `<div class="streak-chip${active ? ' active' : ''}">
+    🔥 连续 <strong>${d.streak}</strong> 天
+    ${d.totalPoints > 0 ? `<span class="streak-pts">⭐ ${d.totalPoints} 分</span>` : ''}
+  </div>`;
+}
+
+// 结算页用的完整打卡模块（会写入今天的打卡记录）
+function streakDoneHTML() {
+  const { data: d, newMilestones } = markPracticeToday();
+
+  let milestoneHTML = '';
+  if (newMilestones.length) {
+    const pts  = newMilestones.reduce((s, m) => s + m.points, 0);
+    const days = newMilestones[newMilestones.length - 1].days;
+    milestoneHTML = `<div class="milestone-banner">
+      🎉 连续 ${days} 天达成！获得 +${pts} 积分！
+    </div>`;
+  }
+
+  return `<div class="streak-done">
+    ${milestoneHTML}
+    <p class="streak-done-line">🔥 已连续打卡 <strong>${d.streak}</strong> 天
+      ${d.longest > d.streak ? `· 最长 ${d.longest} 天` : ''}</p>
+    ${d.totalPoints > 0
+      ? `<p class="streak-pts-line">⭐ 累计 <strong>${d.totalPoints}</strong> 积分，凭此向爸爸妈妈兑换奖励！</p>`
+      : `<p class="streak-pts-line">连续 5 天可获得第一个积分奖励 💪</p>`}
+  </div>`;
+}
+
 async function boot() {
   await DB.init();
   await loadWords();
   await loadSentences();
+  await loadSentenceProgress();
   loadEcdict(); // 后台预加载 ECDICT 词典，不阻塞启动
 
   initLookup();
