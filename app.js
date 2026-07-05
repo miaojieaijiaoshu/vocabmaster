@@ -470,91 +470,6 @@ function playWrongSound() {
   osc.start(now); osc.stop(now + 0.42);
 }
 
-// ════════════════════════════════════════════
-// 语音验证：点"我认识"后说出中文意思才算过
-// ════════════════════════════════════════════
-function matchesChinese(definition, spoken) {
-  // 提取释义里所有中文词（含单字）作为关键词
-  const keys = (definition.replace(/[a-zA-Z]+\./g, '').match(/[一-鿿]+/g) || []);
-  if (!keys.length) return spoken.trim().length > 0;
-  const sp = spoken.trim();
-  if (!sp) return false;
-  // 说出的包含关键词，或关键词包含说出的（如说"猜"能匹配"猜测"）
-  return keys.some(kw => sp.includes(kw) || kw.includes(sp));
-}
-
-function verifyAnswer(word) {
-  const body = document.getElementById('review-body');
-  body.innerHTML = `
-    <div class="verify-card">
-      <p class="flip-word">${esc(word.english)}</p>
-      ${word.phonetic ? `<p class="flip-phonetic">/${esc(word.phonetic)}/</p>` : ''}
-      <p class="verify-prompt">说出这个词的中文意思 🎤</p>
-      <button class="mic-btn" id="verify-mic">🎤</button>
-      <p id="verify-text" class="verify-transcript">点麦克风开始说</p>
-      <button id="verify-skip" class="verify-skip-btn">不会说？看答案</button>
-    </div>`;
-
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { setTimeout(() => answer(true), 300); return; }
-
-  let rec = null;
-
-  function startRec() {
-    rec = new SR();
-    rec.lang = 'zh-CN';
-    rec.continuous = false;
-    rec.interimResults = true;
-
-    rec.onresult = e => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join('');
-      const el = document.getElementById('verify-text');
-      if (el) el.textContent = t || '…';
-    };
-    rec.onend = () => {
-      const el = document.getElementById('verify-text');
-      const text = el ? el.textContent : '';
-      if (!text || text === '点麦克风开始说' || text === '…') {
-        showVerifyResult(word, false);
-      } else {
-        showVerifyResult(word, matchesChinese(word.chineseDefinition, text));
-      }
-    };
-    rec.onerror = () => showVerifyResult(word, false);
-    rec.start();
-    const btn = document.getElementById('verify-mic');
-    if (btn) btn.classList.add('listening');
-    const el = document.getElementById('verify-text');
-    if (el) el.textContent = '正在听…';
-  }
-
-  setTimeout(startRec, 300);
-
-  document.getElementById('verify-mic').addEventListener('click', () => {
-    try { rec?.stop(); } catch(e) {}
-    setTimeout(startRec, 200);
-  });
-  document.getElementById('verify-skip').addEventListener('click', () => {
-    try { rec?.stop(); } catch(e) {}
-    showVerifyResult(word, false);
-  });
-}
-
-function showVerifyResult(word, correct) {
-  const body = document.getElementById('review-body');
-  if (!body) { answer(correct); return; }
-  body.innerHTML = `
-    <div class="verify-card">
-      <div class="verify-result-icon">${correct ? '🎉' : '😅'}</div>
-      <p class="flip-word">${esc(word.english)}</p>
-      ${correct
-        ? `<p class="verify-msg">说对了！👏</p>`
-        : `<p class="verify-msg">这个词的意思是：</p>
-           <p class="verify-answer">${esc(word.chineseDefinition)}</p>`}
-    </div>`;
-  if (correct) celebrate(20);
-  setTimeout(() => answer(correct), correct ? 1000 : 2200);
-}
 
 function setLookupResult(html) {
   document.getElementById('lookup-result').innerHTML = html;
@@ -763,7 +678,6 @@ function closeAddModal() {
 let reviewQueue = [];
 let reviewIndex = 0;
 let reviewCorrect = 0;
-let reviewFlipped = false;
 let freeReviewMode = false;   // true = 练习模式（不更新艾宾浩斯进度）
 let retryMode = false;        // true = 错题重练阶段
 let reviewWrongWords = [];    // 本轮答错的词，轮末强制重练
@@ -785,7 +699,6 @@ function renderReview() {
   firstPassCorrect = 0;
   reviewIndex = 0;
   reviewCorrect = 0;
-  reviewFlipped = false;
 
   const body = document.getElementById('review-body');
   const scheduled  = words.filter(needsReview);
@@ -851,7 +764,6 @@ function startFreeReview() {
   reviewQueue = words.filter(w => !isMastered(w)).sort(() => Math.random() - 0.5);
   reviewIndex = 0;
   reviewCorrect = 0;
-  reviewFlipped = false;
   showReviewCard();
 }
 
@@ -861,7 +773,6 @@ function startRetry() {
   reviewQueue = [...reviewWrongWords].sort(() => Math.random() - 0.5);
   reviewWrongWords = [];   // 清空，等本轮重练时重新收集答错的
   reviewIndex = 0;
-  reviewFlipped = false;
 
   document.getElementById('review-body').innerHTML = `
     <div class="session-done">
@@ -875,14 +786,11 @@ function startRetry() {
 
 function showReviewCard() {
   if (reviewIndex >= reviewQueue.length) {
-    // 记录第一轮成绩（只记一次）
     if (!retryMode) { firstPassTotal = reviewQueue.length; firstPassCorrect = reviewCorrect; }
-    // 有答错的词→强制重练，否则结算
     if (reviewWrongWords.length > 0) { startRetry(); } else { showSessionDone(); }
     return;
   }
 
-  reviewFlipped = false;
   const word = reviewQueue[reviewIndex];
   const body = document.getElementById('review-body');
 
@@ -894,40 +802,31 @@ function showReviewCard() {
       </div>
     </div>
 
-    <div class="flip-scene" id="flip-scene">
-      <div class="flip-card" id="flip-card">
-        <div class="flip-face flip-front">
-          <p class="flip-word">${esc(word.english)}</p>
-          ${word.phonetic ? `<p class="flip-phonetic">/${esc(word.phonetic)}/</p>` : ''}
-          <div class="flip-stars">${starsHTML(word)}</div>
-          <button class="speak-btn" style="margin-top:8px" onclick="event.stopPropagation();speak('${esc(word.english)}')" aria-label="朗读">🔊</button>
-        </div>
-        <div class="flip-face flip-back">
-          <p class="flip-english-small">${esc(word.english)}</p>
-          <p class="flip-chinese">${esc(word.chineseDefinition)}</p>
-        </div>
+    <div class="tutor-card">
+      <div class="flip-stars">${starsHTML(word)}</div>
+      <p class="flip-word">${esc(word.english)}</p>
+      ${word.phonetic ? `<p class="flip-phonetic">/${esc(word.phonetic)}/</p>` : ''}
+      <button class="speak-btn" id="play-word-btn" style="margin-top:8px" aria-label="朗读">🔊</button>
+      <div class="tutor-answer-ref">
+        <span class="tutor-ref-label">中文</span>
+        ${esc(word.chineseDefinition)}
       </div>
     </div>
 
-    <p class="flip-tap-hint" id="flip-hint">👆 点击卡片看意思</p>
-
-    <div class="answer-row hidden" id="answer-row">
-      <button class="answer-btn btn-wrong" id="btn-wrong">😅 不认识</button>
-      <button class="answer-btn btn-right" id="btn-right">😎 我认识！</button>
+    <div class="answer-row">
+      <button class="answer-btn btn-wrong" id="btn-wrong">✗ 错误</button>
+      <button class="answer-btn btn-right" id="btn-right">✓ 正确</button>
     </div>
   `;
 
-  document.getElementById('flip-scene').addEventListener('click', () => {
-    if (!reviewFlipped) {
-      reviewFlipped = true;
-      document.getElementById('flip-card').classList.add('flipped');
-      document.getElementById('flip-hint').textContent = '你认识这个单词吗？';
-      document.getElementById('answer-row').classList.remove('hidden');
-    }
-  });
+  speak(word.english);
 
+  document.getElementById('play-word-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    speak(word.english);
+  });
   document.getElementById('btn-wrong').addEventListener('click', () => answer(false));
-  document.getElementById('btn-right').addEventListener('click', () => verifyAnswer(word));
+  document.getElementById('btn-right').addEventListener('click', () => answer(true));
 }
 
 async function answer(correct) {
